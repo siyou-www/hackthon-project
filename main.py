@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator
 import sqlite3
 import math
 import httpx
+from datetime import datetime
 
 app = FastAPI()
 
@@ -88,6 +89,11 @@ async def get_weather(
     latitude: float = Query(ge=-90, le=90),
     longitude: float = Query(ge=-180, le=180),
 ):
+    return await fetch_weather(latitude, longitude)
+
+
+async def fetch_weather(latitude: float, longitude: float):
+    """Fetch and validate the hourly forecast shared by both weather endpoints."""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
@@ -138,6 +144,85 @@ async def get_weather(
         return {"timezone": timezone, "hourly": forecast}
     except (ValueError, KeyError, TypeError):
         raise HTTPException(502, "Weather service returned incomplete or invalid forecast data.") from None
+
+
+class Activity(BaseModel):
+    time: str
+    title: str = Field(min_length=1)
+    outdoor: bool
+
+    @field_validator("time")
+    @classmethod
+    def validate_time(cls, value):
+        try:
+            parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M")
+        except ValueError:
+            raise ValueError("Use a local hourly time in YYYY-MM-DDTHH:00 format") from None
+        if parsed.minute != 0 or parsed.strftime("%Y-%m-%dT%H:%M") != value:
+            raise ValueError("Use a local hourly time in YYYY-MM-DDTHH:00 format")
+        return value
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value):
+        if not value.strip():
+            raise ValueError("Title cannot be blank")
+        return value.strip()
+
+
+class DailyPlanRequest(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    activities: list[Activity] = Field(min_length=1)
+
+
+def activity_advice(activity: Activity, weather: dict):
+    advice = []
+    if activity.outdoor:
+        # Put rain warnings first because they may change an outdoor plan.
+        if weather["precipitation_probability"] >= 60:
+            advice.append("Bring an umbrella or consider an indoor alternative.")
+        if weather["temperature_c"] >= 30:
+            advice.append("Stay hydrated and use sun protection.")
+        elif weather["temperature_c"] <= 10:
+            advice.append("Bring an extra layer to stay warm.")
+    else:
+        if weather["precipitation_probability"] >= 60:
+            advice.append("Bring an umbrella for your trip to this indoor activity.")
+        if weather["temperature_c"] >= 30:
+            advice.append("Stay hydrated and use sun protection when traveling outside.")
+        elif weather["temperature_c"] <= 10:
+            advice.append("Bring an extra layer for your trip outside.")
+    if not advice:
+        advice.append("No major temperature or rain concerns for this hour.")
+    return advice
+
+
+@app.post("/api/daily-plan")
+async def create_daily_plan(plan: DailyPlanRequest):
+    forecast = await fetch_weather(plan.latitude, plan.longitude)
+    by_time = {hour["time"]: hour for hour in forecast["hourly"]}
+    errors = []
+    for index, activity in enumerate(plan.activities):
+        if activity.time not in by_time:
+            errors.append({
+                "loc": ["body", "activities", index, "time"],
+                "msg": "Time is outside the available hourly forecast. Use a time from GET /api/weather.",
+                "type": "value_error",
+            })
+    if errors:
+        raise HTTPException(422, detail=errors)
+    return {
+        "timezone": forecast["timezone"],
+        "activities": [
+            {
+                "activity": activity.model_dump(),
+                "weather": by_time[activity.time],
+                "advice": activity_advice(activity, by_time[activity.time]),
+            }
+            for activity in plan.activities
+        ],
+    }
 
 
 # ---------- Create Task ----------
