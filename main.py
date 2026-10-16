@@ -1,9 +1,31 @@
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 import sqlite3
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 DB_NAME = "tasks.db"
 
@@ -106,6 +128,37 @@ def get_tasks(completed: bool | None = None):
                 "SELECT * FROM tasks WHERE completed = ? ORDER BY id",
                 (completed,)
             ).fetchall()
+
+        return {"tasks": [dict(row) for row in rows]}
+    finally:
+        conn.close()
+
+@app.get("/tasks/stats")
+def get_task_stats():
+    conn = get_db_connection()
+
+    try:
+        row = conn.execute("""
+            SELECT
+                COUNT(*) AS total_tasks,
+                COALESCE(SUM(completed = 1), 0) AS completed_tasks,
+                COALESCE(SUM(completed = 0), 0) AS pending_tasks
+            FROM tasks
+        """).fetchone()
+
+        return dict(row)
+    finally:
+        conn.close()
+
+@app.get("/tasks/search")
+def search_tasks(q: str):
+    conn = get_db_connection()
+
+    try:
+        rows = conn.execute(
+            "SELECT * FROM tasks WHERE title LIKE ? ORDER BY id",
+            (f"%{q}%",)
+        ).fetchall()
 
         return {"tasks": [dict(row) for row in rows]}
     finally:
