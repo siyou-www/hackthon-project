@@ -1,8 +1,10 @@
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 import sqlite3
+import math
+import httpx
 
 app = FastAPI()
 
@@ -77,6 +79,65 @@ class TaskUpdate(BaseModel):
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+# ---------- Hourly Weather ----------
+
+@app.get("/api/weather")
+async def get_weather(
+    latitude: float = Query(ge=-90, le=90),
+    longitude: float = Query(ge=-180, le=180),
+):
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "hourly": "temperature_2m,precipitation_probability",
+                    "temperature_unit": "celsius",
+                    "timezone": "auto",
+                },
+            )
+            response.raise_for_status()
+    except httpx.TimeoutException:
+        raise HTTPException(504, "Weather service timed out. Please try again.") from None
+    except httpx.HTTPError:
+        raise HTTPException(502, "Weather service is unavailable. Please try again.") from None
+
+    try:
+        data = response.json()
+        timezone = data["timezone"]
+        hourly = data["hourly"]
+        times = hourly["time"]
+        temperatures = hourly["temperature_2m"]
+        probabilities = hourly["precipitation_probability"]
+        if not isinstance(timezone, str) or not timezone.strip():
+            raise ValueError
+        if not all(isinstance(values, list) for values in (times, temperatures, probabilities)):
+            raise ValueError
+        if not times or not len(times) == len(temperatures) == len(probabilities):
+            raise ValueError
+
+        forecast = []
+        for time, temperature, probability in zip(times, temperatures, probabilities):
+            if not isinstance(time, str) or not time.strip():
+                raise ValueError
+            if any(
+                type(value) not in (int, float) or not math.isfinite(value)
+                for value in (temperature, probability)
+            ) or not 0 <= probability <= 100:
+                raise ValueError
+            forecast.append({
+                "time": time,
+                "temperature_c": temperature,
+                "temperature_f": temperature * 9 / 5 + 32,
+                "precipitation_probability": probability,
+            })
+        return {"timezone": timezone, "hourly": forecast}
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(502, "Weather service returned incomplete or invalid forecast data.") from None
 
 
 # ---------- Create Task ----------

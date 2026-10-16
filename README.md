@@ -48,6 +48,28 @@ http://127.0.0.1:8000/docs
 | PATCH | `/tasks/{task_id}/complete` | Complete a task |
 | DELETE | `/tasks/{task_id}` | Delete a task |
 
+## DayCast hourly weather
+
+`GET /api/weather?latitude=34.0522&longitude=-118.2437` fetches real hourly
+Open-Meteo forecasts in the location's local timezone. Each hourly entry contains
+`time`, `temperature_c`, `temperature_f`, and `precipitation_probability`.
+Latitude must be between -90 and 90; longitude must be between -180 and 180.
+Invalid query parameters return 422, upstream failures or incomplete data return
+502, and upstream timeouts return 504, with JSON error details.
+
+With the API server running, verify manually:
+
+```bash
+curl 'http://127.0.0.1:8000/api/weather?latitude=34.0522&longitude=-118.2437'
+```
+
+Outbound HTTPS access to `api.open-meteo.com` is required; no API key is needed.
+Run the mocked weather tests and task API regression checks with:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
 ## Database
 
 Tasks are stored locally in SQLite. The database file is created automatically when the application initializes.
