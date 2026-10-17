@@ -6,7 +6,8 @@ import Notifications from './Notifications.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
-    <Notifications />
+    <Notifications>
+      <App />
+    </Notifications>
   </StrictMode>,
 )

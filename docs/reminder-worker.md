@@ -103,9 +103,8 @@ in aggregate counts; monitor them rather than relying only on cron exit status.
    subscriptions. Physical device delivery is not established by mocked tests.
 
 PR #9 remains unmerged. This implementation has not been deployed and no existing
-production environment variables, Neon data, or schedules were changed. There
-are still no reminder frontend controls; use existing capability-protected CRUD
-from a trusted client until that separate phase is implemented.
+production environment variables, Neon data, or schedules were changed. The [Phase 3 frontend](reminder-frontend.md) now provides opt-in, restoration and
+cancellation controls using the existing capability-protected CRUD APIs.
 
 ## Tests and safe local PostgreSQL
 

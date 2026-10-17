@@ -121,4 +121,4 @@ Delivery is mocked; reminder CRUD does not call the push sender at all.
 See [Automatic reminder worker](reminder-worker.md) for the standalone command,
 lease/send-boundary migration and deployment checklist. Processing reminders can
 now be cancelled while weather is fetched, but not after the committed push-send
-boundary. There are still no frontend reminder controls.
+boundary. [Phase 3 frontend controls](reminder-frontend.md) now support explicit opt-in and cancellation.

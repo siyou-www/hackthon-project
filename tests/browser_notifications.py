@@ -54,6 +54,9 @@ def run():
                 path = route.request.url
                 if '/api/weather' in path:
                     data = {'timezone': 'America/Los_Angeles', 'hourly': [hour]}
+                elif path.endswith('/reminders'):
+                    assert route.request.headers['authorization'] == 'Bearer ' + 't' * 43
+                    data = {'reminders': []}
                 elif '/api/daily-plan' in path:
                     assert route.request.post_data_json['activities'] == [activity]
                     data = {'activities': [{'activity': activity, 'weather': hour, 'advice': ['Stay hydrated.']}]}
@@ -82,7 +85,7 @@ def run():
             if mode in ('unsupported', 'denied', 'ios-browser'):
                 assert enable.is_disabled()
                 expected = {'unsupported': 'does not support Web Push', 'denied': 'Notifications are blocked', 'ios-browser': 'Add to Home Screen'}[mode]
-                assert expected in page.locator('section').inner_text()
+                assert expected in page.locator('section[aria-labelledby="notifications-title"]').inner_text()
             elif mode == 'deny-click':
                 enable.click()
                 page.get_by_role('alert').wait_for()
