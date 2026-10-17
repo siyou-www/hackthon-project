@@ -17,7 +17,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pywebpush import WebPushException, webpush
 from sqlalchemy import (Column, Float, MetaData, String, Table, Text, create_engine,
-                        delete, insert, or_, select, update)
+                        delete, insert, or_, select, update, Boolean, CheckConstraint,
+                        DateTime, ForeignKey, Index, Integer, UniqueConstraint, event)
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -30,6 +31,39 @@ subscriptions = Table(
     Column("subscription", Text, nullable=False),
     Column("token_hash", String(64), nullable=False),
     Column("last_sent", Float, nullable=True),
+)
+reminders = Table(
+    "activity_reminders", metadata,
+    Column("id", String(36), primary_key=True),
+    Column("subscription_id", String(36), ForeignKey("push_subscriptions.id", ondelete="CASCADE"), nullable=False),
+    Column("activity_id", String(36), nullable=False),
+    Column("title", String(200), nullable=False),
+    Column("outdoor", Boolean, nullable=False),
+    Column("latitude", Float, nullable=False),
+    Column("longitude", Float, nullable=False),
+    Column("preference", String(20), nullable=False),
+    Column("timezone", String(64), nullable=False),
+    Column("starts_at", DateTime(timezone=True), nullable=False),
+    Column("due_at", DateTime(timezone=True), nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("attempt_count", Integer, nullable=False),
+    Column("next_attempt_at", DateTime(timezone=True)),
+    Column("lease_until", DateTime(timezone=True)),
+    Column("last_attempt_at", DateTime(timezone=True)),
+    Column("sent_at", DateTime(timezone=True)),
+    Column("cancelled_at", DateTime(timezone=True)),
+    Column("last_error_code", String(64)),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("subscription_id", "activity_id", name="uq_reminder_subscription_activity"),
+    CheckConstraint("latitude >= -90 AND latitude <= 90", name="ck_reminder_latitude"),
+    CheckConstraint("longitude >= -180 AND longitude <= 180", name="ck_reminder_longitude"),
+    CheckConstraint("preference IN ('cold_sensitive', 'normal', 'heat_sensitive')", name="ck_reminder_preference"),
+    CheckConstraint("status IN ('pending', 'processing', 'retry', 'sent', 'cancelled', 'missed', 'failed', 'uncertain')", name="ck_reminder_status"),
+    CheckConstraint("attempt_count >= 0", name="ck_reminder_attempts"),
+    CheckConstraint("due_at < starts_at", name="ck_reminder_due"),
+    Index("ix_reminder_due", "status", "next_attempt_at"),
+    Index("ix_reminder_lease", "status", "lease_until"),
 )
 SEND_INTERVAL_SECONDS = 60
 
@@ -102,6 +136,10 @@ def get_engine():
                     and not os.getenv("RENDER")):
                 raise ValueError
         engine = create_engine(url, pool_pre_ping=True)
+        if url.get_backend_name() == "sqlite":
+            @event.listens_for(engine, "connect")
+            def enable_foreign_keys(connection, _):
+                connection.execute("PRAGMA foreign_keys=ON")
         metadata.create_all(engine)
         return engine
     except (ValueError, SQLAlchemyError):
@@ -138,9 +176,12 @@ def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-def authorize(connection, subscription_id, authorization):
+def authorize(connection, subscription_id, authorization, *, lock=False):
     token = authorization.removeprefix("Bearer ") if authorization else ""
-    row = connection.execute(select(subscriptions).where(subscriptions.c.id == str(subscription_id))).mappings().first()
+    query = select(subscriptions).where(subscriptions.c.id == str(subscription_id))
+    if lock:
+        query = query.with_for_update()
+    row = connection.execute(query).mappings().first()
     if not row or not authorization or not authorization.startswith("Bearer ") or not hmac.compare_digest(row["token_hash"], digest(token)):
         raise HTTPException(403, "Invalid notification capability.")
     return row

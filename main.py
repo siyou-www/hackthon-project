@@ -11,9 +11,11 @@ import math
 import httpx
 from datetime import datetime
 from push_notifications import router as push_router
+from activity_reminders import router as reminder_router
 
 app = FastAPI()
 app.include_router(push_router)
+app.include_router(reminder_router)
 
 app.add_middleware(
     CORSMiddleware,
