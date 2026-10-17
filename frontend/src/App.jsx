@@ -305,12 +305,11 @@ async function generateDailyPlan() {
     const part = (name) => parts.find((item) => item.type === name)?.value || '00'
     const localNow = `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}`
     const target = `${recommendedOutdoorHour.time.slice(0, 16)}:00`
-    const secondsUntil = (Date.parse(target + 'Z') - Date.parse(localNow + 'Z')) / 1000
-    if (secondsUntil <= 0) {
-      // Avoid an effect update loop; the periodic timer is a fallback.
-      return undefined
-    }
-    const timer = setTimeout(() => setRecommendationNow(Date.now()), Math.max(1, Math.ceil(secondsUntil * 1000)))
+    // Intl formats only whole seconds; account for the original timestamp's milliseconds.
+    const elapsedMs = ((recommendationNow % 1000) + 1000) % 1000
+    const millisecondsUntil = Date.parse(target + 'Z') - Date.parse(localNow + 'Z') - elapsedMs
+    if (millisecondsUntil <= 0) return undefined
+    const timer = setTimeout(() => setRecommendationNow(Date.now()), Math.max(1, Math.ceil(millisecondsUntil)))
     return () => clearTimeout(timer)
   }, [showOutdoorRecommendation, recommendedOutdoorHour?.time, forecastTimezone, recommendationNow])
 
