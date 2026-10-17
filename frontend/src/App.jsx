@@ -6,7 +6,7 @@ import { useReminders } from './useReminders.js'
 import { ACTIVITIES_KEY, DRAFT_KEY, LOCATION, LIVE_STATES, readLocal, writeLocal, mergeReminders, reminderTime, statusLabel } from './activityStorage.js'
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+  import.meta.env.VITE_API_BASE_URL || 'https://daycast-backend.onrender.com'
 
 function App() {
   const [weather, setWeather] = useState([])
@@ -244,10 +244,17 @@ async function generateDailyPlan() {
     preference === 'heat_sensitive' ? 19 : 22
 
   const outdoorCandidates = weather.filter((hour) => {
-    const forecastTime = new Date(hour.time)
+    // Weather hours are wall-clock strings in the forecast timezone, not UTC timestamps.
+    const timezone = forecastTimezone || 'America/Los_Angeles'
+    const now = new Date()
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    }).formatToParts(now)
+    const part = (name) => parts.find((item) => item.type === name)?.value || ''
+    const localNow = `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`
     const hourOfDay = Number(hour.time.split('T')[1]?.slice(0, 2))
-
-    return forecastTime >= new Date() && hourOfDay >= 8 && hourOfDay <= 18
+    return hour.time.slice(0, 16) >= localNow && hourOfDay >= 8 && hourOfDay < 18
   })
   const lowestRainChance = outdoorCandidates.length
     ? Math.min(
