@@ -2,6 +2,10 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
+from typing import Literal
+
+from comfort import get_comfort
+
 import sqlite3
 import math
 import httpx
@@ -177,6 +181,7 @@ class DailyPlanRequest(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     activities: list[Activity] = Field(min_length=1)
+    preference: Literal["cold_sensitive", "normal", "heat_sensitive"] = "normal"
 
 
 def activity_advice(activity: Activity, weather: dict):
@@ -201,6 +206,17 @@ def activity_advice(activity: Activity, weather: dict):
     return advice
 
 
+def activity_result(activity: Activity, weather: dict, preference: str):
+    comfort = get_comfort(weather["temperature_c"], preference, activity.outdoor)
+    return {
+        "activity": activity.model_dump(),
+        "weather": weather,
+        "advice": activity_advice(activity, weather),
+        "comfort": comfort["comfort"],
+        "comfort_advice": comfort["advice"],
+    }
+
+
 @app.post("/api/daily-plan")
 async def create_daily_plan(plan: DailyPlanRequest):
     forecast = await fetch_weather(plan.latitude, plan.longitude)
@@ -218,11 +234,7 @@ async def create_daily_plan(plan: DailyPlanRequest):
     return {
         "timezone": forecast["timezone"],
         "activities": [
-            {
-                "activity": activity.model_dump(),
-                "weather": by_time[activity.time],
-                "advice": activity_advice(activity, by_time[activity.time]),
-            }
+            activity_result(activity, by_time[activity.time], plan.preference)
             for activity in plan.activities
         ],
     }

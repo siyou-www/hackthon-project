@@ -38,6 +38,8 @@ class DailyPlanTests(unittest.TestCase):
                 'activity': self.payload['activities'][0],
                 'weather': {'time': '2026-10-16T14:00', 'temperature_c': 32,
                             'temperature_f': 89.6, 'precipitation_probability': 70},
+                'comfort': 'hot',
+                'comfort_advice': 'Bring water and seek shade outdoors.',
                 'advice': ['Bring an umbrella or consider an indoor alternative.',
                            'Stay hydrated and use sun protection.'],
             }],
@@ -54,6 +56,51 @@ class DailyPlanTests(unittest.TestCase):
         self.assertEqual(response.json()['activities'][0]['weather']['temperature_c'], 8)
         self.assertEqual(response.json()['activities'][0]['advice'], ['Bring an extra layer for your trip outside.'])
         get.assert_awaited_once()
+
+    def test_comfort_preferences_and_context(self):
+        for preference, temperature, classification in (
+            ('cold_sensitive', 20, 'cold'),
+            ('normal', 20, 'comfortable'),
+            ('heat_sensitive', 25, 'hot'),
+        ):
+            for outdoor in (True, False):
+                with self.subTest(preference=preference, outdoor=outdoor):
+                    self.payload['preference'] = preference
+                    self.payload['activities'] = [
+                        {'time': '2026-10-16T14:00', 'title': 'First', 'outdoor': outdoor},
+                        {'time': '2026-10-16T15:00', 'title': 'Second', 'outdoor': not outdoor},
+                    ]
+                    self.forecast['hourly']['temperature_2m'] = [temperature, temperature]
+                    response, get = self.post()
+                    self.assertEqual(response.status_code, 200)
+                    results = response.json()['activities']
+                    self.assertEqual(len(results), 2)
+                    for activity, result in zip(self.payload['activities'], results):
+                        expected = main.get_comfort(temperature, preference, activity['outdoor'])
+                        self.assertEqual(result['activity'], activity)
+                        self.assertEqual(result['comfort'], classification)
+                        self.assertEqual(result['comfort_advice'], expected['advice'])
+                        self.assertIn('weather', result)
+                        self.assertIsInstance(result['advice'], list)
+                    get.assert_awaited_once()
+
+    def test_omitted_preference_matches_normal(self):
+        self.forecast['hourly']['temperature_2m'][0] = 20
+        default_response, _ = self.post()
+        self.payload['preference'] = 'normal'
+        normal_response, _ = self.post()
+        self.assertEqual(default_response.status_code, 200)
+        self.assertEqual(default_response.json(), normal_response.json())
+        self.assertEqual(default_response.json()['activities'][0]['comfort'], 'comfortable')
+
+    def test_invalid_preference_rejected_before_fetch(self):
+        for preference in ('invalid', '', 'Normal', None, 1, True, [], {}):
+            with self.subTest(preference=preference):
+                self.payload['preference'] = preference
+                response, get = self.post()
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(response.json()['detail'][0]['loc'], ['body', 'preference'])
+                get.assert_not_awaited()
 
     def test_rule_thresholds_and_outdoor_context(self):
         for outdoor in (True, False):
