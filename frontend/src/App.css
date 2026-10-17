@@ -1,0 +1,22 @@
+
+.weather-timeline {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 30px;
+}
+
+.weather-card {
+  background-color: #eef6ff;
+  border: 1px solid #c6dff5;
+  border-radius: 15px;
+  padding: 20px;
+  width: 180px;
+  text-align: center;
+  color: #243b53;
+}
+
+.weather-card:hover {
+  background-color: #dceeff;
+}
