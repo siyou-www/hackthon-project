@@ -130,6 +130,10 @@ real test notifications are sent.
 
 ## GitHub Actions scheduling
 
+For an external HTTPS scheduler on Render Free, see the optional
+[capability-protected HTTP trigger](reminder-http-trigger.md). It reuses this
+worker without changing delivery semantics or enabling a scheduling source.
+
 A disabled-by-default five-minute GitHub Actions workflow is now included. See
 [Actions rollout, secrets, manual runs and shutdown](github-actions-reminders.md).
 It is an alternative to the optional Render Cron setup above, not an additional
