@@ -32,10 +32,10 @@ Weather fetching and Daily Plan requests remain network-only and require the
 backend to be online. Offline app-shell availability does not provide offline
 forecasts or advice. No push notifications are registered.
 
-Updates wait until existing DayCast windows are closed and the app is reopened,
-so they do not automatically reload an activity form in progress. For a deploy
-check, close all tabs and standalone windows before reopening. Physical iPhone
-and Android installation should be checked on the deployed HTTPS site.
+Updates activate the new app cache without automatically reloading an open
+activity form. The next user navigation or refresh loads the updated release.
+Physical iPhone and Android installation should be checked on the deployed HTTPS
+site. See [activity persistence investigation and upgrade test](../docs/activity-persistence.md).
 
 ## Opt-in activity reminders
 

@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // Activate updates on the next app launch, without interrupting a plan form.
+      // No automatic page reload: preserve an open plan form during updates.
       registerType: 'prompt',
       injectRegister: 'auto',
       includeAssets: ['apple-touch-icon.png'],
@@ -28,6 +28,10 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Serve the current release on the next navigation instead of leaving
+        // an older, memory-only activity editor cached until every tab closes.
+        skipWaiting: true,
+        clientsClaim: true,
         importScripts: ['/push-events.js'],
         // Cache the app shell only; weather and Daily Plan still require a network.
         globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
