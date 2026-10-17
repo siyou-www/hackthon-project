@@ -13,6 +13,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [weatherRetry, setWeatherRetry] = useState(0)
   const [showOutdoorRecommendation, setShowOutdoorRecommendation] = useState(false)
+  const [recommendationNow, setRecommendationNow] = useState(() => Date.now())
   const [error, setError] = useState('')
   const [unit, setUnit] = useState('C')
   const [selectedHour, setSelectedHour] = useState(null)
@@ -243,10 +244,16 @@ async function generateDailyPlan() {
     preference === 'cold_sensitive' ? 25 :
     preference === 'heat_sensitive' ? 19 : 22
 
+  useEffect(() => {
+    if (!showOutdoorRecommendation) return undefined
+    const timer = setInterval(() => setRecommendationNow(Date.now()), 15000)
+    return () => clearInterval(timer)
+  }, [showOutdoorRecommendation])
+
   const outdoorCandidates = weather.filter((hour) => {
     // Weather hours are wall-clock strings in the forecast timezone, not UTC timestamps.
     const timezone = forecastTimezone || 'America/Los_Angeles'
-    const now = new Date()
+    const now = new Date(recommendationNow)
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
@@ -254,7 +261,7 @@ async function generateDailyPlan() {
     const part = (name) => parts.find((item) => item.type === name)?.value || ''
     const localNow = `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`
     const hourOfDay = Number(hour.time.split('T')[1]?.slice(0, 2))
-    return hour.time.slice(0, 16) >= localNow && hourOfDay >= 8 && hourOfDay < 18
+    return hour.time.slice(0, 16) > localNow && hourOfDay >= 8 && hourOfDay <= 18
   })
   const lowestRainChance = outdoorCandidates.length
     ? Math.min(
@@ -296,7 +303,7 @@ async function generateDailyPlan() {
     <main className="app-shell">
       <header className="topbar"><div className="brand-lockup"><svg aria-hidden="true" width="56" height="56" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="#24446C" strokeWidth="7"/><path d="M50 50 L72 27" stroke="#B8C2CC" strokeWidth="5" strokeLinecap="round"/><circle cx="50" cy="50" r="9" fill="#F6B84A"/></svg><div className="brand-copy"><h1>SkyCue</h1><p className="eyebrow">Know the weather. Plan your day.</p></div></div></header>
       <section className="weather-overview" aria-label="Weather overview"><p className="overview-location">⌖ Los Angeles, CA</p><h2>Today’s forecast</h2><p className="overview-range">{temperatures.length ? `High ${highTemp.toFixed(1)}°${unit} · Low ${lowTemp.toFixed(1)}°${unit}` : 'Weather loading…'}</p></section>
-      <button className="outdoor-prompt" type="button" disabled={loading || !!error} onClick={() => setShowOutdoorRecommendation(true)}>Help me pick the best time to go out →</button>
+      <button className="outdoor-prompt" type="button" disabled={loading || !!error} onClick={() => { setRecommendationNow(Date.now()); setShowOutdoorRecommendation(true) }}>Help me pick the best time to go out →</button>
 
       <h2>Today's Hourly Weather — Los Angeles</h2>
 
