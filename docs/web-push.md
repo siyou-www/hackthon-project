@@ -164,3 +164,7 @@ Before release, manually verify permission grant/denial, subscription persistenc
 through a Render redeploy, a real notification with the iPhone app closed,
 notification tap behavior, Android delivery, cooldown, and opt-out. None of those
 real-provider/device outcomes can be inferred from mocked tests alone.
+
+Reminder persistence and capability-protected CRUD are documented in
+[Activity reminders — Phase 1](activity-reminders.md). This stores opt-in schedules
+only; automatic delivery and frontend reminder controls are not implemented yet.

@@ -1,31 +1,11 @@
 import { useEffect, useState } from 'react'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
-const STORAGE_KEY = 'daycast.push.capability.v1'
-
-function readCapability() {
-  try {
-    const value = JSON.parse(localStorage.getItem(STORAGE_KEY))
-    return value?.id && value?.token ? value : null
-  } catch {
-    return null
-  }
-}
+import { PushContext } from './pushContext.js'
+import { pushApi as api, readCapability, CAPABILITY_STORAGE_KEY as STORAGE_KEY } from './pushApi.js'
 
 function publicKeyBytes(value) {
   const decoded = atob(value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4))
   return Uint8Array.from(decoded, (char) => char.charCodeAt(0))
-}
-
-async function api(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}/api/push${path}`, options)
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    const error = new Error(typeof data.detail === 'string' ? data.detail : 'Notification request failed.')
-    error.status = response.status
-    throw error
-  }
-  return data
 }
 
 async function readyWorker() {
@@ -41,7 +21,7 @@ async function readyWorker() {
   }
 }
 
-export default function Notifications() {
+export default function Notifications({ children }) {
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
@@ -52,6 +32,8 @@ export default function Notifications() {
   const [subscribed, setSubscribed] = useState(false)
   const [capability, setCapability] = useState(readCapability)
   const [busy, setBusy] = useState('')
+  const [checking, setChecking] = useState(available)
+  const [removedSubscriptionIds, setRemovedSubscriptionIds] = useState([])
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -62,10 +44,11 @@ export default function Notifications() {
       setPermission(Notification.permission)
       navigator.serviceWorker.getRegistration('/').then(async (registration) => {
         const subscription = await registration?.pushManager.getSubscription()
-        if (active) setSubscribed(Boolean(subscription))
-      }).catch(() => { if (active) setError('Could not read notification subscription status.') })
+        if (active) { setSubscribed(Boolean(subscription)); setChecking(false) }
+      }).catch(() => { if (active) { setError('Could not read notification subscription status.'); setChecking(false) } })
     }
     refresh()
+    navigator.serviceWorker.ready.then(() => { if (active) refresh() }).catch(() => {})
     window.addEventListener('focus', refresh)
     return () => { active = false; window.removeEventListener('focus', refresh) }
   }, [available])
@@ -113,6 +96,11 @@ export default function Notifications() {
           if (![403, 410].includes(failure.status)) throw failure
         }
       }
+      if (capability) {
+        setRemovedSubscriptionIds((ids) => [...new Set([...ids, capability.id])])
+        localStorage.removeItem(STORAGE_KEY)
+        setCapability(null)
+      }
       const registration = await readyWorker()
       const subscription = await registration.pushManager.getSubscription()
       if (subscription && !await subscription.unsubscribe()) throw new Error('Could not disable browser subscription. Please try again.')
@@ -134,6 +122,7 @@ export default function Notifications() {
     } catch (failure) {
       setError(failure.message)
       if ([403, 410].includes(failure.status)) {
+        if (failure.status === 410) setRemovedSubscriptionIds((ids) => [...new Set([...ids, capability.id])])
         localStorage.removeItem(STORAGE_KEY); setCapability(null)
       }
     } finally {
@@ -142,6 +131,8 @@ export default function Notifications() {
   }
 
   return (
+    <PushContext.Provider value={{ available, permission, subscribed, capability, checking, busy, removedSubscriptionIds }}>
+    {children}
     <section aria-labelledby="notifications-title">
       <h2 id="notifications-title">Notifications</h2>
       <p>Permission: {permission}. Subscription: {subscribed && capability ? 'enabled' : subscribed ? 'browser subscription needs recovery' : 'not enabled'}.</p>
@@ -160,7 +151,8 @@ export default function Notifications() {
       {busy && <p role="status">Working on notifications…</p>}
       {message && <p role="status">{message}</p>}
       {error && <p role="alert">{error}</p>}
-      <p>Test notifications are opt-in only. No automatic weather alerts are sent.</p>
+      <p>Notifications and activity reminders are opt-in only. Saving an activity without a reminder sends no automatic alert.</p>
     </section>
+    </PushContext.Provider>
   )
 }

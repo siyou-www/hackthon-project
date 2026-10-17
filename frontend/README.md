@@ -36,3 +36,12 @@ Updates wait until existing DayCast windows are closed and the app is reopened,
 so they do not automatically reload an activity form in progress. For a deploy
 check, close all tabs and standalone windows before reopening. Physical iPhone
 and Android installation should be checked on the deployed HTTPS site.
+
+## Opt-in activity reminders
+
+Select a weather hour and use the unchecked **Remind me 30 minutes before** option
+after enabling notifications. Saved reminders restore from PostgreSQL, and pending
+reminders can be cancelled from the reminder list. See
+[frontend reminder behavior and deployment prerequisites](../docs/reminder-frontend.md).
+Run `npm test` for mocked React integration tests; build and lint commands remain
+unchanged. No reminder API or push notification is sent for an ordinary activity.

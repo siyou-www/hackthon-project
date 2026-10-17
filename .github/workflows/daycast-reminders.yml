@@ -1,0 +1,48 @@
+name: DayCast reminder worker
+
+on:
+  schedule:
+    # UTC, offset from the top of the hour; GitHub schedules are best-effort.
+    - cron: '2-57/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daycast-reminder-worker
+  cancel-in-progress: false
+
+jobs:
+  reminders:
+    # Manual runs are explicit opt-in; automatic runs require an exact repository variable.
+    # Never dispatch secret-bearing worker code from a feature/PR branch or a fork.
+    if: >-
+      github.repository == 'siyou-www/hackthon-project' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' && vars.DAYCAST_REMINDERS_ENABLED == 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: daycast-reminders
+    steps:
+      # Official v6.0.0 releases; reviewed action metadata and credential/cache handling.
+      - name: Check out trusted workflow revision
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        with:
+          persist-credentials: false
+      - name: Set up Python 3.12
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Process due reminders
+        env:
+          PUSH_DATABASE_URL: ${{ secrets.PUSH_DATABASE_URL }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+        run: python -m reminder_worker --limit 20
