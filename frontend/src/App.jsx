@@ -11,6 +11,8 @@ const API_BASE_URL =
 function App() {
   const [weather, setWeather] = useState([])
   const [loading, setLoading] = useState(true)
+  const [weatherRetry, setWeatherRetry] = useState(0)
+  const [showOutdoorRecommendation, setShowOutdoorRecommendation] = useState(false)
   const [error, setError] = useState('')
   const [unit, setUnit] = useState('C')
   const [selectedHour, setSelectedHour] = useState(null)
@@ -98,7 +100,7 @@ setForecastTimezone(data.timezone)
     }
 
     fetchWeather()
-  }, [])
+  }, [weatherRetry])
 
   function formatTime(time) {
     const hour = time.split('T')[1]?.slice(0, 5)
@@ -229,10 +231,65 @@ async function generateDailyPlan() {
   }
 }
 
+    const temperatures = weather
+    .map((hour) =>
+      Number(unit === 'C' ? hour.temperature_c : hour.temperature_f)
+    )
+    .filter(Number.isFinite)
+
+  const highTemp = temperatures.length ? Math.max(...temperatures) : null
+  const lowTemp = temperatures.length ? Math.min(...temperatures) : null
+    const preferredTemperatureC =
+    preference === 'cold_sensitive' ? 25 :
+    preference === 'heat_sensitive' ? 19 : 22
+
+  const outdoorCandidates = weather.filter((hour) => {
+    const forecastTime = new Date(hour.time)
+    const hourOfDay = Number(hour.time.split('T')[1]?.slice(0, 2))
+
+    return forecastTime >= new Date() && hourOfDay >= 8 && hourOfDay <= 18
+  })
+  const lowestRainChance = outdoorCandidates.length
+    ? Math.min(
+        ...outdoorCandidates.map((hour) =>
+          Number(hour.precipitation_probability ?? 100)
+        )
+      )
+    : null
+
+  const driestCandidates = outdoorCandidates.filter(
+    (hour) =>
+      Number(hour.precipitation_probability ?? 100) === lowestRainChance
+  )
+  const recommendedOutdoorHour = [...outdoorCandidates].sort((a, b) => {
+    const rainDifference =
+      Number(a.precipitation_probability ?? 100) -
+      Number(b.precipitation_probability ?? 100)
+
+    if (rainDifference !== 0) return rainDifference
+
+    return (
+      Math.abs(Number(a.temperature_c) - preferredTemperatureC) -
+      Math.abs(Number(b.temperature_c) - preferredTemperatureC)
+    )
+  })[0] ?? null
+    const temperaturePreferenceLabel =
+    preference === 'cold_sensitive'
+      ? 'warmer temperatures'
+      : preference === 'heat_sensitive'
+        ? 'cooler temperatures'
+        : 'moderate temperatures'
+
+  const recommendationReason =
+    driestCandidates.length > 1
+      ? `Rain chance is tied for the lowest. This hour is closest to your preference for ${temperaturePreferenceLabel}.`
+      : 'This hour has the lowest rain probability among the upcoming daytime hours.'
+
   return (
-    <div>
-      <h1>🌤️ DayCast</h1>
-      <p>Know the weather. Plan your day.</p>
+    <main className="app-shell">
+      <header className="topbar"><div className="brand-lockup"><svg aria-hidden="true" width="56" height="56" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="#24446C" strokeWidth="7"/><path d="M50 50 L72 27" stroke="#B8C2CC" strokeWidth="5" strokeLinecap="round"/><circle cx="50" cy="50" r="9" fill="#F6B84A"/></svg><div className="brand-copy"><h1>SkyCue</h1><p className="eyebrow">Know the weather. Plan your day.</p></div></div></header>
+      <section className="weather-overview" aria-label="Weather overview"><p className="overview-location">⌖ Los Angeles, CA</p><h2>Today’s forecast</h2><p className="overview-range">{temperatures.length ? `High ${highTemp.toFixed(1)}°${unit} · Low ${lowTemp.toFixed(1)}°${unit}` : 'Weather loading…'}</p></section>
+      <button className="outdoor-prompt" type="button" disabled={loading || !!error} onClick={() => setShowOutdoorRecommendation(true)}>Help me pick the best time to go out →</button>
 
       <h2>Today's Hourly Weather — Los Angeles</h2>
 
@@ -245,6 +302,7 @@ async function generateDailyPlan() {
 
       {loading && <p>⏳ Loading weather...</p>}
 
+      {error && <button type="button" onClick={() => setWeatherRetry((n) => n + 1)}>Retry weather</button>}
       {error && (
         <p style={{ color: 'red' }}>
           ⚠️ Weather unavailable: {error}
@@ -451,7 +509,7 @@ async function generateDailyPlan() {
           
         </div>
       )}
-      <section aria-labelledby="reminders-title">
+      <section className="section-block" aria-labelledby="reminders-title">
         <h2 id="reminders-title">Saved activity reminders</h2>
         {!push.capability && <p>Enable Notifications to restore or manage reminders for this device.</p>}
         {reminders.loading && <p role="status">Restoring reminders…</p>}
@@ -468,7 +526,8 @@ async function generateDailyPlan() {
             onClick={() => cancelReminder(row)}>Cancel reminder for {row.title}</button>}
         </article>)}
       </section>
-    </div>
+      {showOutdoorRecommendation && <div className="skycue-modal-backdrop" role="presentation" onClick={() => setShowOutdoorRecommendation(false)}><section className="skycue-modal" role="dialog" aria-modal="true" aria-label="Best time to go outdoors" onClick={(event) => event.stopPropagation()}><button type="button" onClick={() => setShowOutdoorRecommendation(false)}>Close ✕</button><h2>Best time to go outdoors</h2>{recommendedOutdoorHour ? <><h3>{formatTime(recommendedOutdoorHour.time)}</h3><p>{unit === 'C' ? `${recommendedOutdoorHour.temperature_c}°C` : `${Number(recommendedOutdoorHour.temperature_f).toFixed(1)}°F`} · Rain {recommendedOutdoorHour.precipitation_probability}%</p><p>{recommendationReason}</p></> : <p>No upcoming daytime hours available today.</p>}</section></div>}
+    </main>
   )
 }
 
