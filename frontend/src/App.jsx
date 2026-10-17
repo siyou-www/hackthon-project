@@ -15,6 +15,7 @@ function App() {
   const [isOutdoor, setIsOutdoor] = useState(false)
   const [activities, setActivities] = useState({})
   const [dailyPlan, setDailyPlan] = useState(null)
+  const [preference, setPreference] = useState('normal')
 const [planLoading, setPlanLoading] = useState(false)
 const [planError, setPlanError] = useState('')
 
@@ -128,6 +129,7 @@ async function generateDailyPlan() {
       body: JSON.stringify({
         latitude: 34.0522,
         longitude: -118.2437,
+        preference,
         activities: selectedActivities
       })
     })
@@ -267,6 +269,21 @@ async function generateDailyPlan() {
         <div style={{ marginTop: '30px' }}>
           <h2>Your Daily Activities</h2>
 
+<label htmlFor="comfort-preference">Temperature preference </label>
+<select
+  id="comfort-preference"
+  value={preference}
+  disabled={planLoading}
+  onChange={(event) => {
+    setPreference(event.target.value)
+    setDailyPlan(null)
+  }}
+>
+  <option value="cold_sensitive">Gets cold easily</option>
+  <option value="normal">Normal</option>
+  <option value="heat_sensitive">Gets hot easily</option>
+</select>
+
 <button
   type="button"
   onClick={generateDailyPlan}
@@ -300,6 +317,9 @@ async function generateDailyPlan() {
         <p>
           💧 Rain: {item.weather.precipitation_probability}%
         </p>
+
+        <p>Comfort: {item.comfort}</p>
+        <p>{item.comfort_advice}</p>
 
         <h4>Weather Advice</h4>
 
