@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import NotificationOnboarding from './NotificationOnboarding.jsx'
 
 import { PushContext } from './pushContext.js'
 import { pushApi as api, readCapability, CAPABILITY_STORAGE_KEY as STORAGE_KEY } from './pushApi.js'
@@ -77,9 +78,11 @@ export default function Notifications({ children }) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(saved))
       setCapability(saved); setSubscribed(true)
       setMessage('Notifications enabled. Tap Send Test Notification to send your first test.')
+      return true
     } catch (failure) {
       if (created) await created.unsubscribe().catch(() => {})
       setError(failure.message)
+      return false
     } finally {
       setBusy('')
     }
@@ -133,6 +136,10 @@ export default function Notifications({ children }) {
   return (
     <PushContext.Provider value={{ available, permission, subscribed, capability, checking, busy, removedSubscriptionIds }}>
     {children}
+    <NotificationOnboarding
+      eligible={available && !checking && permission === 'default' && !subscribed && !capability && !error}
+      enable={enable} busy={busy === 'enable'} error={error}
+    />
     <section aria-labelledby="notifications-title">
       <h2 id="notifications-title">Notifications</h2>
       <p>Permission: {permission}. Subscription: {subscribed && capability ? 'enabled' : subscribed ? 'browser subscription needs recovery' : 'not enabled'}.</p>

@@ -45,3 +45,6 @@ reminders can be cancelled from the reminder list. See
 [frontend reminder behavior and deployment prerequisites](../docs/reminder-frontend.md).
 Run `npm test` for mocked React integration tests; build and lint commands remain
 unchanged. No reminder API or push notification is sent for an ordinary activity.
+
+First eligible launches offer an optional notification dialog; iPhone/iPad require
+the installed Home Screen app. See [onboarding behavior and tests](../docs/notification-onboarding.md).
