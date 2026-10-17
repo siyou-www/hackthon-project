@@ -294,6 +294,26 @@ async function generateDailyPlan() {
         ? 'cooler temperatures'
         : 'moderate temperatures'
 
+  // Refresh precisely when the displayed recommendation reaches its start time.
+  // A periodic refresh alone can leave an expired hour visible for up to 15 seconds.
+  useEffect(() => {
+    if (!showOutdoorRecommendation || !recommendedOutdoorHour || !forecastTimezone) return undefined
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: forecastTimezone, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    }).formatToParts(new Date(recommendationNow))
+    const part = (name) => parts.find((item) => item.type === name)?.value || '00'
+    const localNow = `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}`
+    const target = `${recommendedOutdoorHour.time.slice(0, 16)}:00`
+    const secondsUntil = (Date.parse(target + 'Z') - Date.parse(localNow + 'Z')) / 1000
+    if (secondsUntil <= 0) {
+      // Avoid an effect update loop; the periodic timer is a fallback.
+      return undefined
+    }
+    const timer = setTimeout(() => setRecommendationNow(Date.now()), Math.max(1, Math.ceil(secondsUntil * 1000)))
+    return () => clearTimeout(timer)
+  }, [showOutdoorRecommendation, recommendedOutdoorHour?.time, forecastTimezone, recommendationNow])
+
   const recommendationReason =
     driestCandidates.length > 1
       ? `Rain chance is tied for the lowest. This hour is closest to your preference for ${temperaturePreferenceLabel}.`
