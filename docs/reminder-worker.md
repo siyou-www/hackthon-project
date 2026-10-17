@@ -21,7 +21,8 @@ transactions are short and no network request holds database row locks. Default
 limits are 20 items and a soft 50-second budget checked between items; individual
 network calls can extend the run. Overlapping cron runs are safe.
 
-The catch-up window ends five minutes after the scheduled reminder due time;
+The catch-up window ends 15 minutes after the scheduled reminder due time (or
+at activity start if earlier);
 reminders are never intentionally sent after the activity starts. Old due items
 are marked `missed`. Each eligible attempt fetches fresh Open-Meteo data explicitly
 in the saved IANA timezone, matches the activity's local hour, and combines
@@ -126,3 +127,11 @@ configuration, so tests do not use production `PUSH_DATABASE_URL`/Neon. Tests dr
 tables: use a disposable local PostgreSQL instance only. Weather and push delivery
 are mocked, including simulated acceptance followed by a database failure. No
 real test notifications are sent.
+
+## GitHub Actions scheduling
+
+A disabled-by-default five-minute GitHub Actions workflow is now included. See
+[Actions rollout, secrets, manual runs and shutdown](github-actions-reminders.md).
+It is an alternative to the optional Render Cron setup above, not an additional
+scheduler to run simultaneously. The worker uses a 15-minute catch-up grace with
+a centralized activity-start cutoff and final TTL check.

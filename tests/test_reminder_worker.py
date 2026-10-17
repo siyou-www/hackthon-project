@@ -88,7 +88,7 @@ class WorkerTests(unittest.TestCase):
 
     def test_not_due_missed_and_cancelled_do_not_send(self):
         for changes, expected in (({'due_at': self.now + timedelta(minutes=1)}, 'pending'),
-                                  ({'due_at': self.now - timedelta(minutes=6)}, 'missed'),
+                                  ({'due_at': self.now - timedelta(seconds=worker.GRACE_SECONDS + 60)}, 'missed'),
                                   ({'status': 'cancelled'}, 'cancelled')):
             self.change(**{'status':'pending', 'due_at':self.now, 'next_attempt_at':self.now, **changes})
             _, _, send = self.run_worker()
@@ -129,7 +129,7 @@ class WorkerTests(unittest.TestCase):
     def test_missing_forecast_hour_retries_and_elapsed_window_is_missed(self):
         self.run_worker(forecast={'hourly': []})
         self.assertEqual(self.row()['status'], 'retry')
-        self.now += timedelta(minutes=6)
+        self.now += timedelta(seconds=worker.GRACE_SECONDS + 60)
         _, weather, send = self.run_worker()
         self.assertEqual(self.row()['status'], 'missed')
         weather.assert_not_awaited()
@@ -146,7 +146,7 @@ class WorkerTests(unittest.TestCase):
         self.assertNotIn('sent', self.run_worker()[0])
 
     def test_retry_after_beyond_window_marks_missed(self):
-        self.run_worker(error=WebPushException('private', response=httpx.Response(429, headers={'Retry-After':'600'})))
+        self.run_worker(error=WebPushException('private', response=httpx.Response(429, headers={'Retry-After': str(worker.GRACE_SECONDS + 300)})))
         self.assertEqual(self.row()['status'], 'missed')
 
     def test_permanent_rejection_failed_ambiguous_errors_uncertain(self):
@@ -213,7 +213,7 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(self.row()['attempt_count'], 0)
 
     def test_expired_leases_obey_window_and_attempt_limits(self):
-        for count, delta, expected in ((3, 91, 'failed'), (1, 360, 'missed')):
+        for count, delta, expected in ((3, 91, 'failed'), (1, worker.GRACE_SECONDS + 60, 'missed')):
             self.change(status='pending', attempt_count=count - 1, next_attempt_at=self.now,
                         due_at=self.now, push_started_at=None)
             worker.claim_one(self.engine)
@@ -273,3 +273,90 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(sum(result.get('sent', 0) for result in results), 1)
         send.assert_called_once()
         self.assertEqual(self.row()['status'], 'sent')
+
+    def test_delayed_five_minute_schedule_sends_once_with_reduced_ttl(self):
+        self.now += timedelta(minutes=5, seconds=30)
+        result, _, send = self.run_worker()
+        self.assertEqual(result['sent'], 1)
+        self.assertEqual(send.call_args.kwargs['ttl'], 570)
+        self.now += timedelta(minutes=5)
+        _, weather, send = self.run_worker()
+        weather.assert_not_awaited()
+        send.assert_not_called()
+
+    def test_deadline_is_earlier_of_grace_or_activity_start(self):
+        row = self.row()
+        self.assertEqual(worker.send_deadline(row), self.now + timedelta(minutes=15))
+        row['starts_at'] = self.now + timedelta(minutes=2)
+        self.assertEqual(worker.send_deadline(row), row['starts_at'])
+        self.assertTrue(worker.expired(row, row['starts_at']))
+
+    def test_at_fifteen_minute_deadline_reminder_is_missed_without_fetch(self):
+        self.now += timedelta(minutes=15)
+        _, weather, send = self.run_worker()
+        self.assertEqual(self.row()['status'], 'missed')
+        weather.assert_not_awaited()
+        send.assert_not_called()
+
+    def test_ttl_is_capped_by_earlier_activity_start(self):
+        self.change(starts_at=self.now + timedelta(minutes=1))
+        hour = {**self.forecast['hourly'][0], 'time': '2030-01-02T13:31'}
+        _, _, send = self.run_worker(forecast={'hourly': [hour]})
+        self.assertEqual(send.call_args.kwargs['ttl'], 60)
+        self.assertEqual(self.row()['status'], 'sent')
+
+    def test_no_send_at_activity_start_even_with_grace_remaining(self):
+        self.change(starts_at=self.now + timedelta(minutes=1))
+        self.now += timedelta(minutes=1)
+        _, weather, send = self.run_worker()
+        self.assertEqual(self.row()['status'], 'missed')
+        weather.assert_not_awaited()
+        send.assert_not_called()
+
+    def test_deadline_crossed_after_send_boundary_prevents_push(self):
+        prepare = worker.prepare_send
+        def pause_after_commit(engine, claim):
+            subscription = prepare(engine, claim)
+            self.now = worker.send_deadline(claim)
+            return subscription
+        with patch.object(worker, 'prepare_send', side_effect=pause_after_commit):
+            _, _, send = self.run_worker()
+        self.assertEqual(self.row()['status'], 'missed')
+        self.assertEqual(self.row()['last_error_code'], 'window_elapsed_before_push')
+        send.assert_not_called()
+
+    def test_subsecond_remaining_ttl_is_not_rounded_up(self):
+        self.now += timedelta(minutes=14, seconds=59, microseconds=500000)
+        _, _, send = self.run_worker()
+        self.assertEqual(self.row()['status'], 'missed')
+        send.assert_not_called()
+
+    def test_weather_delay_crossing_deadline_is_missed(self):
+        self.now += timedelta(minutes=14, seconds=59)
+        async def weather(*args, **kwargs):
+            self.now += timedelta(seconds=2)
+            return self.forecast
+        with patch.object(worker, 'fetch_weather', side_effect=weather), patch.object(worker, 'webpush') as send:
+            worker.run_once(self.engine)
+        self.assertEqual(self.row()['status'], 'missed')
+        send.assert_not_called()
+
+    def test_retries_on_subsequent_five_minute_runs_are_bounded_and_can_succeed(self):
+        self.now += timedelta(seconds=70)  # Queue and dependency installation delay.
+        with patch.object(worker, 'fetch_weather', side_effect=HTTPException(504)), patch.object(worker, 'webpush') as send:
+            for _ in range(2):
+                worker.run_once(self.engine)
+                self.assertEqual(self.row()['status'], 'retry')
+                self.now += timedelta(minutes=5)
+            send.assert_not_called()
+        self.run_worker()
+        self.assertEqual(self.row()['status'], 'sent')
+        self.assertEqual(self.row()['attempt_count'], 3)
+        self.now += timedelta(minutes=5)
+        self.assertNotIn('sent', self.run_worker()[0])
+
+    def test_retry_must_fit_before_activity_start(self):
+        self.change(starts_at=self.now + timedelta(seconds=20))
+        claim = worker.claim_one(self.engine)
+        self.assertEqual(worker.retry(self.engine, claim, 'weather_unavailable'), 'missed')
+        self.assertIsNone(self.row()['next_attempt_at'])

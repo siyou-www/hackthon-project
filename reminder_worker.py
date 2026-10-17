@@ -20,7 +20,7 @@ from weather_service import activity_advice, fetch_weather
 
 UTC = timezone.utc
 LEASE_SECONDS = 90
-GRACE_SECONDS = 300
+GRACE_SECONDS = 900
 MAX_ATTEMPTS = 3
 
 
@@ -32,8 +32,12 @@ def aware(value):
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
+def send_deadline(row):
+    return min(aware(row['due_at']) + timedelta(seconds=GRACE_SECONDS), aware(row['starts_at']))
+
+
 def expired(row, now):
-    return now > aware(row['due_at']) + timedelta(seconds=GRACE_SECONDS) or now >= aware(row['starts_at'])
+    return now >= send_deadline(row)
 
 
 def owned(row, token):
@@ -64,7 +68,7 @@ def retry(engine, row, code, retry_after=None):
     if row['attempt_count'] >= MAX_ATTEMPTS:
         finish(engine, row, 'failed', code)
         return 'failed'
-    if next_attempt > aware(row['due_at']) + timedelta(seconds=GRACE_SECONDS):
+    if next_attempt >= send_deadline(row):
         finish(engine, row, 'missed', code)
         return 'missed'
     finish(engine, row, 'retry', code, next_attempt)
@@ -143,12 +147,12 @@ def prepare_send(engine, claim):
     Crash after this commit => uncertain, never an automatic second send. Locks
     follow the CRUD API's parent-then-child order; network calls hold no DB locks.
     """
-    now = utc_now()
     with engine.begin() as connection:
         subscription = connection.execute(select(subscriptions).where(
             subscriptions.c.id == claim['subscription_id']).with_for_update()).mappings().first()
         row = connection.execute(select(reminders).where(
             reminders.c.id == claim['id']).with_for_update()).mappings().first()
+        now = utc_now()  # Lock acquisition can take time; do not reuse an earlier timestamp.
         if not subscription or not owned(row, claim['lease_token']) or aware(row['lease_until']) <= now:
             return None
         if expired(row, now):
@@ -175,10 +179,15 @@ def process(engine, row, vapid):
     private, _, subject = vapid
     # Topic is a stable <=32-character base64url provider-side coalescing key.
     topic = base64.urlsafe_b64encode(hashlib.sha256(row['id'].encode()).digest()[:24]).decode().rstrip('=')
+    # Recheck after the committed send boundary, directly before calling the provider.
+    ttl = int((send_deadline(row) - utc_now()).total_seconds())
+    if ttl <= 0:
+        finish(engine, row, 'missed', 'window_elapsed_before_push')
+        return 'missed'
     try:
         response = webpush(subscription_info=subscription, data=json.dumps(message),
                            vapid_private_key=private, vapid_claims={'sub': subject},
-                           ttl=max(1, min(GRACE_SECONDS, int((aware(row['due_at']) + timedelta(seconds=GRACE_SECONDS) - utc_now()).total_seconds()))),
+                           ttl=ttl,
                            timeout=10, headers={'Topic': topic})
         status = response.status_code
     except WebPushException as error:

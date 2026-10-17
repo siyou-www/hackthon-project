@@ -102,7 +102,9 @@ manual verification after an authorized deployment.
 No backend API contract, database schema, environment variable, or worker command
 changes are introduced in Phase 3. Deploy the complete PR #9 backend with migrations
 001 and 002 applied to persistent PostgreSQL, configured VAPID values, and a
-separate minute-by-minute worker job as documented in [Phase 2](reminder-worker.md).
+separate scheduled worker job as documented in [Phase 2](reminder-worker.md).
+The opt-in [GitHub Actions workflow](github-actions-reminders.md) supports a
+five-minute schedule; keep automatic scheduling disabled until rollout approval.
 Then build/deploy the frontend over HTTPS using the existing `VITE_API_BASE_URL`.
 Close/reopen installed PWA windows to activate the updated cached shell. Creating
 a reminder without the scheduled worker running stores a pending row but does
