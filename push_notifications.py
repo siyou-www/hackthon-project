@@ -49,6 +49,8 @@ reminders = Table(
     Column("attempt_count", Integer, nullable=False),
     Column("next_attempt_at", DateTime(timezone=True)),
     Column("lease_until", DateTime(timezone=True)),
+    Column("lease_token", String(36)),
+    Column("push_started_at", DateTime(timezone=True)),
     Column("last_attempt_at", DateTime(timezone=True)),
     Column("sent_at", DateTime(timezone=True)),
     Column("cancelled_at", DateTime(timezone=True)),

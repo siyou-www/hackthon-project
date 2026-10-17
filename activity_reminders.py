@@ -71,6 +71,8 @@ def as_utc(value):
 
 def public_reminder(row):
     result = dict(row)
+    result.pop("lease_token", None)
+    result.pop("push_started_at", None)
     # Return reminder data only, never subscription endpoints, keys, or capabilities.
     for key, value in result.items():
         if isinstance(value, datetime):
@@ -138,9 +140,10 @@ def cancel_reminder(subscription_id: UUID, activity_id: UUID,
         raise HTTPException(404, "Reminder not found.")
     if row["status"] == "cancelled":
         return public_reminder(row)
-    if row["status"] not in ("pending", "retry"):
+    if row["status"] not in ("pending", "retry", "processing") or row["push_started_at"] is not None:
         raise HTTPException(409, "This reminder can no longer be cancelled.")
     now = utc_now()
     connection.execute(update(reminders).where(reminders.c.id == row["id"]).values(
-        status="cancelled", cancelled_at=now, updated_at=now, next_attempt_at=None, lease_until=None))
+        status="cancelled", cancelled_at=now, updated_at=now, next_attempt_at=None,
+        lease_until=None, lease_token=None))
     return public_reminder(find_reminder(connection, subscription_id, activity_id))

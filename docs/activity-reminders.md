@@ -62,7 +62,8 @@ next attempt is the due time. This does not cause any notification to be sent.
 - `DELETE /api/push/subscriptions/{id}/reminders/{activity_id}` cancels a `pending`
   or future `retry` reminder and returns its representation. The row is retained
   as a tombstone; repeated DELETE returns the same cancelled row. Unknown reminder
-  IDs return 404. Sent, processing, and other final states return 409 on DELETE.
+  IDs return 404. Sent and other final states return 409 on DELETE. In Phase 2,
+  processing rows remain cancellable until their committed push-send boundary.
 
 PUT returns 409 for any non-pending row, including an identical retry against a
 cancelled or sent reminder. A new explicit reminder after cancellation requires a
@@ -114,3 +115,10 @@ PUSH_TEST_DATABASE_URL='<disposable PostgreSQL URL>' \
 
 The existing test setup creates/drops tables. Never target a production database.
 Delivery is mocked; reminder CRUD does not call the push sender at all.
+
+## Phase 2 worker extension
+
+See [Automatic reminder worker](reminder-worker.md) for the standalone command,
+lease/send-boundary migration and deployment checklist. Processing reminders can
+now be cancelled while weather is fetched, but not after the committed push-send
+boundary. There are still no frontend reminder controls.

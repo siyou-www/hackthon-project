@@ -12,7 +12,7 @@ self.addEventListener('push', (event) => {
     body,
     icon: '/pwa-192x192.png',
     badge: '/pwa-192x192.png',
-    tag: 'daycast-test',
+    tag: typeof message.tag === 'string' ? message.tag.slice(0, 100) : 'daycast-test',
     data: { url: '/' },
   }))
 })

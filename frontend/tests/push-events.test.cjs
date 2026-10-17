@@ -26,6 +26,18 @@ test('push displays title, body and icon without trusting a payload URL', async 
   assert.equal(shown[0].options.body, 'Hello')
   assert.equal(shown[0].options.icon, '/pwa-192x192.png')
   assert.equal(shown[0].options.data.url, '/')
+  assert.equal(shown[0].options.tag, 'daycast-test')
+})
+
+test('reminders use their unique supplied tags', async () => {
+  const { handlers, shown } = worker()
+  for (const id of ['first', 'second']) {
+    let pending
+    handlers.push({ data: { json: () => ({ tag: `daycast-reminder-${id}` }) }, waitUntil: (promise) => { pending = promise } })
+    await pending
+  }
+  assert.equal(shown[0].options.tag, 'daycast-reminder-first')
+  assert.equal(shown[1].options.tag, 'daycast-reminder-second')
 })
 
 test('missing and malformed payloads still show visible fallback notifications', async () => {
