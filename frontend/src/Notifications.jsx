@@ -142,7 +142,7 @@ export default function Notifications() {
   }
 
   return (
-    <section aria-labelledby="notifications-title">
+    <section className="notifications-panel" aria-labelledby="notifications-title">
       <h2 id="notifications-title">Notifications</h2>
       <p>Permission: {permission}. Subscription: {subscribed && capability ? 'enabled' : subscribed ? 'browser subscription needs recovery' : 'not enabled'}.</p>
       {ios && !standalone && <p>On iPhone or iPad, use Safari → Share → Add to Home Screen, then open DayCast from its Home Screen icon. Web Push requires iOS/iPadOS 16.4 or later.</p>}

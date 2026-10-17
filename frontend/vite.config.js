@@ -13,8 +13,8 @@ export default defineConfig({
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
         id: '/',
-        name: 'DayCast',
-        short_name: 'DayCast',
+        name: 'SkyCue',
+        short_name: 'SkyCue',
         description: 'Weather and personalized advice for your day.',
         start_url: '/',
         scope: '/',
