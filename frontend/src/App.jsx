@@ -150,7 +150,7 @@ async function generateDailyPlan() {
       <h1>🌤️ DayCast</h1>
       <p>Know the weather. Plan your day.</p>
 
-      <h2>Today's Hourly Weather</h2>
+      <h2>Today's Hourly Weather — Los Angeles</h2>
 
       <button
         type="button"
@@ -321,9 +321,7 @@ async function generateDailyPlan() {
               </p>
             ))}
 
-          <p style={{ color: '#777' }}>
-            Personalized weather recommendations coming soon!
-          </p>
+          
         </div>
       )}
     </div>
