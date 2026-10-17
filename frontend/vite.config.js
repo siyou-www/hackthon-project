@@ -7,9 +7,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // Activate updates on the next app launch, without interrupting a plan form.
+      // The app explicitly registers the SW and offers a user-controlled update.
       registerType: 'prompt',
-      injectRegister: 'auto',
+      injectRegister: null,
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
         id: '/',
