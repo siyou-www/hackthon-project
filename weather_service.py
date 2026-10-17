@@ -1,9 +1,19 @@
 """Shared forecasts and activity advice, without importing the FastAPI app or task DB."""
+import logging
 import math
 
 import httpx
 from fastapi import HTTPException
 from comfort import get_comfort
+
+logger = logging.getLogger(__name__)
+
+
+def _log_httpx_failure(error):
+    # Never include exception text, traceback, URLs, headers, or response bodies.
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    logger.warning("Open-Meteo request failed: exception=%s upstream_status=%s",
+                   type(error).__name__, status)
 
 
 async def fetch_weather(latitude: float, longitude: float, forecast_timezone: str = "auto"):
@@ -21,9 +31,11 @@ async def fetch_weather(latitude: float, longitude: float, forecast_timezone: st
                 },
             )
             response.raise_for_status()
-    except httpx.TimeoutException:
+    except httpx.TimeoutException as error:
+        _log_httpx_failure(error)
         raise HTTPException(504, "Weather service timed out. Please try again.") from None
-    except httpx.HTTPError:
+    except httpx.HTTPError as error:
+        _log_httpx_failure(error)
         raise HTTPException(502, "Weather service is unavailable. Please try again.") from None
 
     try:

@@ -84,6 +84,36 @@ class WeatherTests(unittest.TestCase):
         self.assertEqual(response.status_code, 502)
         self.assertNotIn('private', response.text)
 
+    def test_http_status_logging_excludes_sensitive_details(self):
+        request = httpx.Request(
+            'GET', 'https://private-user:private-password@example.com/?token=private-token',
+            headers={'Authorization': 'Bearer private-header'},
+        )
+        upstream = httpx.Response(429, request=request, text='private-response-body')
+        error = httpx.HTTPStatusError('private-exception-message', request=request, response=upstream)
+        with self.assertLogs('weather_service', level='WARNING') as logs:
+            response, _ = self.fetch(error=error)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json(), {'detail': 'Weather service is unavailable. Please try again.'})
+        self.assertEqual(logs.output, [
+            'WARNING:weather_service:Open-Meteo request failed: exception=HTTPStatusError upstream_status=429',
+        ])
+        self.assertIsNone(logs.records[0].exc_info)
+
+    def test_transport_logging_preserves_timeout_and_connection_responses(self):
+        for error, status, detail in (
+            (httpx.ReadTimeout('private-timeout-details'), 504, 'Weather service timed out. Please try again.'),
+            (httpx.ConnectError('private-connection-details'), 502, 'Weather service is unavailable. Please try again.'),
+        ):
+            with self.subTest(error=type(error).__name__), self.assertLogs('weather_service', level='WARNING') as logs:
+                response, _ = self.fetch(error=error)
+            self.assertEqual(response.status_code, status)
+            self.assertEqual(response.json(), {'detail': detail})
+            self.assertEqual(logs.output, [
+                f'WARNING:weather_service:Open-Meteo request failed: exception={type(error).__name__} upstream_status=None',
+            ])
+            self.assertIsNone(logs.records[0].exc_info)
+
     def test_missing_or_incomplete_data(self):
         cases = [{}, {'timezone': 'UTC'}, {'timezone': 'UTC', 'hourly': None}, []]
         for key in self.data['hourly']:
