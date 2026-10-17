@@ -162,3 +162,9 @@ Run both existing and new mocked tests with
 ## Database
 
 Tasks are stored locally in SQLite. The database file is created automatically when the application initializes.
+
+## Phase 1 Web Push notifications
+
+Opt-in Home Screen PWA test notifications are documented in
+[Web Push setup and deployment](docs/web-push.md). Production subscriptions require
+PostgreSQL plus backend VAPID configuration; existing task SQLite is unchanged.

@@ -28,6 +28,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        importScripts: ['/push-events.js'],
         // Cache the app shell only; weather and Daily Plan still require a network.
         globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
         navigateFallbackDenylist: [/^\/api(?:\/|$)/],
