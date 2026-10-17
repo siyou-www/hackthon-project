@@ -1,6 +1,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import './App.css'
+import useForecastHour from './useForecastHour.js'
 import { usePush } from './pushContext.js'
 import { useReminders } from './useReminders.js'
 import { ACTIVITIES_KEY, DRAFT_KEY, LOCATION, LIVE_STATES, readLocal, writeLocal, mergeReminders, reminderTime, statusLabel } from './activityStorage.js'
@@ -9,7 +10,7 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'https://daycast-backend.onrender.com'
 
 function App() {
-  const [weather, setWeather] = useState([])
+  const [forecastHours, setForecastHours] = useState([])
   const [loading, setLoading] = useState(true)
   const [weatherRetry, setWeatherRetry] = useState(0)
   const [showOutdoorRecommendation, setShowOutdoorRecommendation] = useState(false)
@@ -31,6 +32,11 @@ const [planError, setPlanError] = useState('')
   }, [])
   const reminders = useReminders(push.capability, receiveReminders)
   const [forecastTimezone, setForecastTimezone] = useState('')
+  const currentForecastHour = useForecastHour(forecastTimezone)
+  const weather = useMemo(() => forecastHours.filter((hour) =>
+    hour.time.startsWith(currentForecastHour.slice(0, 10))
+  ), [forecastHours, currentForecastHour])
+  const displayedWeather = weather.filter((hour) => hour.time >= currentForecastHour)
   const [remind, setRemind] = useState(false)
   const [draftId, setDraftId] = useState('')
   const [draftPreference, setDraftPreference] = useState('normal')
@@ -80,19 +86,8 @@ const [planError, setPlanError] = useState('')
           throw new Error('Invalid weather data')
         }
 
-        const today = new Intl.DateTimeFormat('en-CA', {
-  timeZone: data.timezone,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit'
-}).format(new Date())
-
-const todayWeather = data.hourly.filter((hour) =>
-  hour.time.startsWith(today)
-)
-
-setWeather(todayWeather)
-setForecastTimezone(data.timezone)
+        setForecastHours(data.hourly)
+        setForecastTimezone(data.timezone)
       } catch (err) {
         setError(err.message)
       } finally {
@@ -348,7 +343,7 @@ async function generateDailyPlan() {
       {saving && <p role="status">Saving activity or reminder changes…</p>}
       {draft && !selectedHour && <p>An unsaved activity draft is retained. Select its hour to retry.</p>}
       <div className="weather-timeline">
-        {weather.map((hour) => (
+        {displayedWeather.map((hour) => (
           <div
             className="weather-card"
             key={hour.time}
