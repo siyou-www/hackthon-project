@@ -7,14 +7,14 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // Activate updates on the next app launch, without interrupting a plan form.
+      // The app explicitly registers the SW and offers a user-controlled update.
       registerType: 'prompt',
-      injectRegister: 'auto',
+      injectRegister: null,
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
         id: '/',
-        name: 'DayCast',
-        short_name: 'DayCast',
+        name: 'SkyCue',
+        short_name: 'SkyCue',
         description: 'Weather and personalized advice for your day.',
         start_url: '/',
         scope: '/',
