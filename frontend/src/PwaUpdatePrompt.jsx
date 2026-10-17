@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { registerSW } from 'virtual:pwa-register/react'
+import { registerSW } from 'virtual:pwa-register'
 
 // The PWA update is opt-in so editing an activity is not interrupted.
 export default function PwaUpdatePrompt() {
